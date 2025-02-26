@@ -6,26 +6,20 @@ $(function () {
 
     function TraminatorViewModel(parameters) {
         var self = this;
-        self.tram = function () {
-            console.log("Tram: run tram");
-            OctoPrint.simpleApiCommand("traminator", "tram").done(function (response) {
-                console.log(response);
-            });
-        };
 
         self.wizard = function () {
             console.log("Tram: run wizard");
             OctoPrint.simpleApiCommand("traminator", "wizard").done(function (response) {
-                var resultElements = $(`[data-traminator-coord]`)
+                var resultElements = $(`[data-traminator-location]`)
                 resultElements.text("...")
                 console.log(response);
             });
         };
 
         self.probe = function (data, event) {
-            var probeLocation = event.target.dataset.traminatorCoord.split(',');
+            var location = event.target.dataset.traminatorLocation;
 
-            OctoPrint.simpleApiCommand("traminator", "probe", { "x": parseFloat(probeLocation[0]), "y": parseFloat(probeLocation[1]) }).done(function (response) {
+            OctoPrint.simpleApiCommand("traminator", "probe", { "location": parseInt(location) }).done(function (response) {
                 console.log(response);
             });
 
@@ -35,14 +29,11 @@ $(function () {
             if (plugin != "traminator") {
                 return
             }
-            console.log("Tram: Recieved Plugin Message");
-            if (data.type == "adjustment") {
-                $(`#traminator-${data.screw.toLowerCase()}`).text(`${data.turn} (${data.offset} mm)`);
-            }
 
+            console.log("Tram: Recieved Plugin Message");
             if (data.type == "probe") {
-                var coord = `${data.x},${data.y}`;
-                var resultElement = $(`[data-traminator-coord="${coord}"]`)
+                var location = `${data.location}`;
+                var resultElement = $(`[data-traminator-location="${location}"]`)
                 resultElement.text(`${data.advice} (${data.z} mm)`)
             }
         }

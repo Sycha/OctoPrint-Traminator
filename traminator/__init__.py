@@ -1,10 +1,7 @@
 from octoprint.plugin import TemplatePlugin, StartupPlugin, SimpleApiPlugin, AssetPlugin
-import logging
 import re
-import asyncio
 from asyncio import Queue
 
-CMD_TRAM = "tram"
 CMD_PROBE = "probe"
 CMD_WIZARD = "wizard"
 
@@ -15,7 +12,6 @@ SCREWMMPERTURN = {"M3": 0.5}
 class TraminatorPlugin(TemplatePlugin, StartupPlugin, SimpleApiPlugin, AssetPlugin):
     def __init__(self):
         super().__init__()
-        self._turn_pattern = re.compile("^Turn (.*) (C?CW) by (.*) \((.*)\)")
         self._probe_pattern = re.compile(
             "^Bed X: ([-0-9.]*) Y: ([-0-9.]*) Z: ([-0-9.]*)$"
         )
@@ -36,7 +32,7 @@ class TraminatorPlugin(TemplatePlugin, StartupPlugin, SimpleApiPlugin, AssetPlug
         return [dict(type="tab", template="traminator_tab.jinja2")]
 
     def get_api_commands(self):
-        return {CMD_TRAM: [], CMD_PROBE: [], CMD_WIZARD: []}
+        return {CMD_PROBE: [], CMD_WIZARD: []}
 
     def on_after_startup(self):
         self._logger.debug(
@@ -47,15 +43,11 @@ class TraminatorPlugin(TemplatePlugin, StartupPlugin, SimpleApiPlugin, AssetPlug
         if not self._printer.is_ready():
             return
 
-        if command == CMD_TRAM:
-            self._logger.info("Running Tram Assistant")
-            self.run_tram()
-
         if command == CMD_PROBE:
             self._logger.info(f"Running probe{data}")
-            x = data["x"]
-            y = data["y"]
-            self.run_probe(x, y)
+            location = data["location"]
+            coords = self._probe_locations[location]
+            self.run_probe(coords[0], coords[1])
 
         if command == CMD_WIZARD:
             self._logger.info("Running probe wizard")
@@ -63,27 +55,13 @@ class TraminatorPlugin(TemplatePlugin, StartupPlugin, SimpleApiPlugin, AssetPlug
                 self.run_probe(p[0], p[1])
 
     def on_gcode_received(self, comm, line, *args, **kwargs):
-        self.try_parse_tram_result(line)
         self.try_parse_probe_result(line)
 
         return line
 
-    def try_parse_tram_result(self, line):
-        result = self._turn_pattern.match(line)
-        if result is None:
-            return
-
-        self._logger.info("Received Tram result")
-
-        screw = result.group(1)
-        direction = result.group(2)
-        turn = f"{direction} {result.group(3)}"
-        offset = result.group(4)
-
-        self._plugin_manager.send_plugin_message(
-            self._identifier,
-            {"type": "adjustment", "screw": screw, "turn": turn, "offset": offset},
-        )
+    @property
+    def origin(self):
+        return self._probe_samples[0]
 
     def try_parse_probe_result(self, line):
         gcode_match = self._probe_pattern.match(line)
@@ -92,23 +70,33 @@ class TraminatorPlugin(TemplatePlugin, StartupPlugin, SimpleApiPlugin, AssetPlug
 
         self._logger.info("Received z-probe result")
 
-        location = (float(gcode_match.group(1)), float(gcode_match.group(2)))
+        # Convert string matches to structured data
+        locationCoords = (float(gcode_match.group(1)), float(gcode_match.group(2)))
         z = float(gcode_match.group(3))
+        location = self._probe_locations.index(locationCoords)
 
-        self._logger.info(f"{location} = {z}")
+        self._logger.info(f"{location}: {locationCoords} = {z}")
 
+        # Retain the probe value
         self._probe_samples[location] = z
-        advice = ""
-        if location == self._probe_locations[0]:
-            self._logger.info("New Origin")
-            self._origin_offset = z
-            self._probe_samples = {location: z}
-            advice = "Datum"
-        elif location in self._probe_locations:
-            self._logger.info("Normaled on origin")
-            z = round(z - self._origin_offset, 2)
 
-            # Create human tramming advice
+        # Create human tramming advice
+        advice = ""
+
+        # Datum probe
+        if location == 0:
+            self._logger.info("New Origin")
+            if self.origin != z:
+                # Reset the samples
+                self._probe_samples = {location: z}
+
+            advice = "Datum"
+
+        # Dependant screw probe
+        elif location:
+            self._logger.info("Normaled on origin")
+            z = round(z - self.origin, 2)
+
             direction = "CW" if z < 0 else "CCW"
             minutes = int(round(float(abs(z)) / SCREWMMPERTURN["M3"] * 60))
             turns = minutes // 60
@@ -121,15 +109,11 @@ class TraminatorPlugin(TemplatePlugin, StartupPlugin, SimpleApiPlugin, AssetPlug
             self._identifier,
             {
                 "type": "probe",
-                "x": location[0],
-                "y": location[1],
+                "location": location,
                 "z": z,
                 "advice": advice,
             },
         )
-
-    def run_tram(self):
-        self._printer.commands(["G28 O", "G35"])
 
     def run_probe(self, x, y):
         self._printer.commands(["G28 O", f"G30 X{x} Y{y}"])
