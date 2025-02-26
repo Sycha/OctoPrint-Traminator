@@ -1,2 +1,20 @@
-Tram on rails
-<button data-bind="click: tram">Tram</button>
+<table class="table table-bordered table-hover">
+    <tr>
+        <th></th>
+        <th>Left</th>
+        <th>Right</th>
+    </tr>
+    <tr>
+        <th>Back</th>
+        <td id="traminator-back-left" data-traminator-coord="35,270" data-bind="click: probe">-</td>
+        <td id="traminator-back-right" data-traminator-coord="270,270" data-bind="click: probe">-</td>
+    </tr>
+    <tr>
+        <th>Front</th>
+        <td data-traminator-coord="35,30">Datum (0mm)</td>
+        <td id="traminator-front-right" data-traminator-coord="270,30" data-bind="click: probe">-</td>
+    </tr>
+</table>
+<button class="btn btn-primary btn-block" data-bind="click: tram">Tram</button>
+
+<button class="btn btn-primary btn-block" data-bind="click: wizard">Wizard</button>
