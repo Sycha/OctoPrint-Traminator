@@ -7,12 +7,22 @@
     </tr>
     <tr>
         <th>Back</th>
-        <td id="traminator-back-left" data-traminator-location="3" data-bind="click: probe">-</td>
-        <td id="traminator-back-right" data-traminator-location="2" data-bind="click: probe">-</td>
+        <td data-bind="click: probe(3), text: tramOffsets[3]"></td>
+        <td data-bind="click: probe(2), text: tramOffsets[2]">
+        </td>
     </tr>
     <tr>
         <th>Front</th>
-        <td data-traminator-coord="35,30">Datum (0mm)</td>
-        <td id="traminator-front-right" data-traminator-location="1" data-bind="click: probe">-</td>
+        <td data-bind="text: tramOffsets[0]"></td>
+        <td data-bind="click: probe(1), text: tramOffsets[1]">
+        </td>
     </tr>
 </table>
+
+<div class="progress" data-bind="visible: ublPointCount() > 0">
+    <div class="bar" id="meshProbingProgress" role="progressbar" aria-valuemin="0" data-bind="
+        style: { width: ublAutoProbeProgressPercent() + '%' }, 
+        attr: { 'aria-valuenow': ublAutoPointCurrent(), 'aria-valuemax': ublPointCount() }"></div>
+</div>
+<button class="btn btn-primary btn-block" data-bind="click: ublAutoProbe">UBL Auto Probe</button>
+<button class="btn btn-primary btn-block" data-bind="click: ublFillUnpopulated">UBL Fill Unpopulated</button>

@@ -4,6 +4,8 @@ from asyncio import Queue
 
 CMD_PROBE = "probe"
 CMD_WIZARD = "wizard"
+CMD_UBLAUTOPROBE = "ublAutoProbe"
+CMD_UBLFILLUNPOPULATED = "ublFillUnpopulated"
 
 
 SCREWMMPERTURN = {"M3": 0.5}
@@ -14,6 +16,11 @@ class TraminatorPlugin(TemplatePlugin, StartupPlugin, SimpleApiPlugin, AssetPlug
         super().__init__()
         self._probe_pattern = re.compile(
             "^Bed X: ([-0-9.]*) Y: ([-0-9.]*) Z: ([-0-9.]*)$"
+        )
+
+        # Probing mesh point 80/100
+        self._meshProbingProgressPattern = re.compile(
+            "Probing mesh point ([0-9]*)/([0-9]*)\\."
         )
         self._probe_locations = [
             (35.0, 30.0),
@@ -32,7 +39,12 @@ class TraminatorPlugin(TemplatePlugin, StartupPlugin, SimpleApiPlugin, AssetPlug
         return [dict(type="tab", template="traminator_tab.jinja2")]
 
     def get_api_commands(self):
-        return {CMD_PROBE: [], CMD_WIZARD: []}
+        return {
+            CMD_PROBE: [],
+            CMD_WIZARD: [],
+            CMD_UBLAUTOPROBE: [],
+            CMD_UBLFILLUNPOPULATED: [],
+        }
 
     def on_after_startup(self):
         self._logger.debug(
@@ -54,14 +66,47 @@ class TraminatorPlugin(TemplatePlugin, StartupPlugin, SimpleApiPlugin, AssetPlug
             for p in self._probe_locations:
                 self.run_probe(p[0], p[1])
 
+        if command == CMD_UBLAUTOPROBE:
+            self._logger.info("Running UBL Auto Probe")
+            self.run_ubl_auto_probe()
+
+        if command == CMD_UBLFILLUNPOPULATED:
+            self._logger.info("Running fill unpopulated")
+            self.run_ubl_fill_unpopulated()
+
     def on_gcode_received(self, comm, line, *args, **kwargs):
         self.try_parse_probe_result(line)
+        self.try_parse_meshProbingProgress(line)
 
         return line
+
+    def run_ubl_auto_probe(self):
+        self._printer.commands(["G28 O", "G29 P1 T1", "M117 Autoprobe complete"])
+
+    def run_ubl_fill_unpopulated(self):
+        self._printer.commands(["G28 O", "G29 P3 T1"])
+
+    def try_parse_meshProbingProgress(self, line):
+        gcode_match = self._meshProbingProgressPattern.match(line)
+        if gcode_match is None:
+            return
+        current = int(gcode_match.group(1))
+        total = int(gcode_match.group(2))
+        self._plugin_manager.send_plugin_message(
+            self._identifier,
+            {
+                "type": "meshProbingProgress",
+                "current": current,
+                "total": total,
+            },
+        )
 
     @property
     def origin(self):
         return self._probe_samples[0]
+
+    def run_probe(self, x, y):
+        self._printer.commands(["G28 O", f"G30 X{x} Y{y}"])
 
     def try_parse_probe_result(self, line):
         gcode_match = self._probe_pattern.match(line)
@@ -114,9 +159,6 @@ class TraminatorPlugin(TemplatePlugin, StartupPlugin, SimpleApiPlugin, AssetPlug
                 "advice": advice,
             },
         )
-
-    def run_probe(self, x, y):
-        self._printer.commands(["G28 O", f"G30 X{x} Y{y}"])
 
 
 traminator = TraminatorPlugin()
