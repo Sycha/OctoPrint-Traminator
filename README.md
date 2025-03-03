@@ -8,6 +8,10 @@ Currently being built for my needs with hardcoded hardware attributes for one of
 
 The plugin is very much in alpha and is used at your own risk. Features may not work and has the potentual to cause damage. The code is shared for reference and I say again, if you decide to use it then it is AT YOUR OWN RISK.
 
+## Deployment script
+
+To use the ```deply.sh``` script you need to create a copy of ```.env-octoprint-api.example``` as ```.env-octoprint-api``` and substitute in your own octoprint host and apikey
+
 ## Installation
 
 Currently using manual file installation as in work in progress stage. If you can't install the plugin without specific instructions then in its current state it isn't for you.
