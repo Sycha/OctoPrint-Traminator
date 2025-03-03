@@ -10,7 +10,7 @@ The plugin is very much in alpha and is used at your own risk. Features may not 
 
 ## Deployment script
 
-To use the ```deply.sh``` script you need to create a copy of ```.env-octoprint-api.example``` as ```.env-octoprint-api``` and substitute in your own octoprint host and apikey
+To use the ```deploy.sh``` script you need to create a copy of ```.env-octoprint-api.example``` as ```.env-octoprint-api``` and substitute in your own octoprint host and apikey
 
 ## Installation
 
