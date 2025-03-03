@@ -1,3 +1,7 @@
+<label>
+    Target temperature:
+    <input type="number" data-bind="value: targetTemperature">
+</label>
 <button class="btn btn-primary btn-block" data-bind="click: wizard">Tram Wizard</button>
 <table class="table table-bordered table-hover">
     <tr>
@@ -8,21 +12,22 @@
     <tr>
         <th>Back</th>
         <td data-bind="click: probe(3), text: tramOffsets[3]"></td>
-        <td data-bind="click: probe(2), text: tramOffsets[2]">
-        </td>
+        <td data-bind="click: probe(2), text: tramOffsets[2]"></td>
     </tr>
     <tr>
         <th>Front</th>
         <td data-bind="text: tramOffsets[0]"></td>
-        <td data-bind="click: probe(1), text: tramOffsets[1]">
-        </td>
+        <td data-bind="click: probe(1), text: tramOffsets[1]"></td>
     </tr>
 </table>
-
 <div class="progress" data-bind="visible: ublPointCount() > 0">
-    <div class="bar" id="meshProbingProgress" role="progressbar" aria-valuemin="0" data-bind="
-        style: { width: ublAutoProbeProgressPercent() + '%' }, 
-        attr: { 'aria-valuenow': ublAutoPointCurrent(), 'aria-valuemax': ublPointCount() }"></div>
+    <div class="bar"
+         id="meshProbingProgress"
+         role="progressbar"
+         aria-valuemin="0"
+         data-bind=" style: { width: ublAutoProbeProgressPercent() + '%' }, attr: { 'aria-valuenow': ublAutoPointCurrent(), 'aria-valuemax': ublPointCount() }">
+    </div>
 </div>
 <button class="btn btn-primary btn-block" data-bind="click: ublAutoProbe">UBL Auto Probe</button>
-<button class="btn btn-primary btn-block" data-bind="click: ublFillUnpopulated">UBL Fill Unpopulated</button>
+<button class="btn btn-primary btn-block"
+        data-bind="click: ublFillUnpopulated">UBL Fill Unpopulated</button>
