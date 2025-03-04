@@ -1,36 +1,26 @@
 from octoprint.plugin import TemplatePlugin, StartupPlugin, SimpleApiPlugin, AssetPlugin
-import re
-from asyncio import Queue
-
-CMD_PROBE = "probe"
-CMD_WIZARD = "wizard"
-CMD_UBLAUTOPROBE = "ublAutoProbe"
-CMD_UBLFILLUNPOPULATED = "ublFillUnpopulated"
-
-
-SCREWMMPERTURN = {"M3": 0.5}
+from .features.probeplus import ProbeAssistantPlus
+from .features.ublmesh import UblMeshGenerator
 
 
 class TraminatorPlugin(TemplatePlugin, StartupPlugin, SimpleApiPlugin, AssetPlugin):
-    def __init__(self):
+    def __init__(self, probe_assistant_plus_builder, ubl_mesh_generator_builder):
         super().__init__()
-        self._probe_pattern = re.compile(
-            "^Bed X: ([-0-9.]*) Y: ([-0-9.]*) Z: ([-0-9.]*)$"
-        )
+        self._probe_assistant_plus_builder = probe_assistant_plus_builder
+        self._ubl_mesh_generator_builder = ubl_mesh_generator_builder
 
-        # Probing mesh point 80/100
-        self._meshProbingProgressPattern = re.compile(
-            "Probing mesh point ([0-9]*)/([0-9]*)\\."
+    def initialize(self):
+
+        # Closure to enforce message identifier usage and simplify sending messages for features
+        def send_plugin_message(data):
+            self._plugin_manager.send_plugin_message(self._identifier, data)
+
+        self._probe_assistant_plus = self._probe_assistant_plus_builder(
+            self._printer, send_plugin_message, self._logger
         )
-        self._probe_locations = [
-            (35.0, 30.0),
-            (270.0, 30.0),
-            (270.0, 270.0),
-            (35.0, 270.0),
-        ]
-        self._probe_samples = {}
-        self._task_queue = Queue()
-        self._origin_offset = 0
+        self._ubl_mesh_generator = self._ubl_mesh_generator_builder(
+            self._printer, send_plugin_message, self._logger
+        )
 
     def get_assets(self):
         return {"js": ["js/traminator.js"]}
@@ -40,10 +30,8 @@ class TraminatorPlugin(TemplatePlugin, StartupPlugin, SimpleApiPlugin, AssetPlug
 
     def get_api_commands(self):
         return {
-            CMD_PROBE: [],
-            CMD_WIZARD: [],
-            CMD_UBLAUTOPROBE: [],
-            CMD_UBLFILLUNPOPULATED: [],
+            **self._probe_assistant_plus.get_api_commands(),
+            **self._ubl_mesh_generator.get_api_commands(),
         }
 
     def on_after_startup(self):
@@ -55,113 +43,18 @@ class TraminatorPlugin(TemplatePlugin, StartupPlugin, SimpleApiPlugin, AssetPlug
         if not self._printer.is_ready():
             return
 
-        if command == CMD_PROBE:
-            self._logger.info(f"Running probe{data}")
-            location = data["location"]
-            coords = self._probe_locations[location]
-            self.run_probe(coords[0], coords[1])
-
-        if command == CMD_WIZARD:
-            self._logger.info("Running probe wizard")
-            for p in self._probe_locations:
-                self.run_probe(p[0], p[1])
-
-        if command == CMD_UBLAUTOPROBE:
-            self._logger.info("Running UBL Auto Probe")
-            self.run_ubl_auto_probe()
-
-        if command == CMD_UBLFILLUNPOPULATED:
-            self._logger.info("Running fill unpopulated")
-            self.run_ubl_fill_unpopulated()
+        self._probe_assistant_plus.on_api_command(command, data)
+        self._ubl_mesh_generator.on_api_command(command, data)
 
     def on_gcode_received(self, comm, line, *args, **kwargs):
-        self.try_parse_probe_result(line)
-        self.try_parse_meshProbingProgress(line)
+        self._probe_assistant_plus.on_gcode_received(self, line)
+        self._ubl_mesh_generator.on_gcode_received(self, line)
 
         return line
 
-    def run_ubl_auto_probe(self):
-        self._printer.commands(["G28 O", "G29 P1 T1", "M117 Autoprobe complete"])
 
-    def run_ubl_fill_unpopulated(self):
-        self._printer.commands(["G28 O", "G29 P3 T1"])
-
-    def try_parse_meshProbingProgress(self, line):
-        gcode_match = self._meshProbingProgressPattern.match(line)
-        if gcode_match is None:
-            return
-        current = int(gcode_match.group(1))
-        total = int(gcode_match.group(2))
-        self._plugin_manager.send_plugin_message(
-            self._identifier,
-            {
-                "type": "meshProbingProgress",
-                "current": current,
-                "total": total,
-            },
-        )
-
-    @property
-    def origin(self):
-        return self._probe_samples[0]
-
-    def run_probe(self, x, y):
-        self._printer.commands(["G28 O", f"G30 X{x} Y{y}"])
-
-    def try_parse_probe_result(self, line):
-        gcode_match = self._probe_pattern.match(line)
-        if gcode_match is None:
-            return
-
-        self._logger.info("Received z-probe result")
-
-        # Convert string matches to structured data
-        locationCoords = (float(gcode_match.group(1)), float(gcode_match.group(2)))
-        z = float(gcode_match.group(3))
-        location = self._probe_locations.index(locationCoords)
-
-        self._logger.info(f"{location}: {locationCoords} = {z}")
-
-        # Retain the probe value
-        self._probe_samples[location] = z
-
-        # Create human tramming advice
-        advice = ""
-
-        # Datum probe
-        if location == 0:
-            self._logger.info("New Origin")
-            if self.origin != z:
-                # Reset the samples
-                self._probe_samples = {location: z}
-
-            advice = "Datum"
-
-        # Dependant screw probe
-        elif location:
-            self._logger.info("Normaled on origin")
-            z = round(z - self.origin, 2)
-
-            direction = "CW" if z < 0 else "CCW"
-            minutes = int(round(float(abs(z)) / SCREWMMPERTURN["M3"] * 60))
-            turns = minutes // 60
-            minutes = minutes - (turns * 60)
-
-            advice = f"{direction} {turns} turns and {minutes} minutes"
-
-        # Send to web frontend
-        self._plugin_manager.send_plugin_message(
-            self._identifier,
-            {
-                "type": "probe",
-                "location": location,
-                "z": z,
-                "advice": advice,
-            },
-        )
-
-
-traminator = TraminatorPlugin()
+# Inject feature construstors into the plugin. These can be mocked for testing or decorated for extending functionality
+traminator = TraminatorPlugin(ProbeAssistantPlus, UblMeshGenerator)
 
 __plugin_name__ = "Traminator"
 __plugin_version__ = "1.0.0"
