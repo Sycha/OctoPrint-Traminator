@@ -1,13 +1,14 @@
 from octoprint.plugin import TemplatePlugin, StartupPlugin, SimpleApiPlugin, AssetPlugin
 from .features.probeplus import ProbeAssistantPlus
 from .features.ublmesh import UblMeshGenerator
+from collections import ChainMap
 
 
 class TraminatorPlugin(TemplatePlugin, StartupPlugin, SimpleApiPlugin, AssetPlugin):
-    def __init__(self, probe_assistant_plus_builder, ubl_mesh_generator_builder):
+    def __init__(self, feature_builders):
         super().__init__()
-        self._probe_assistant_plus_builder = probe_assistant_plus_builder
-        self._ubl_mesh_generator_builder = ubl_mesh_generator_builder
+
+        self._feature_builders = feature_builders
 
     def initialize(self):
 
@@ -15,12 +16,10 @@ class TraminatorPlugin(TemplatePlugin, StartupPlugin, SimpleApiPlugin, AssetPlug
         def send_plugin_message(data):
             self._plugin_manager.send_plugin_message(self._identifier, data)
 
-        self._probe_assistant_plus = self._probe_assistant_plus_builder(
-            self._printer, send_plugin_message, self._logger
-        )
-        self._ubl_mesh_generator = self._ubl_mesh_generator_builder(
-            self._printer, send_plugin_message, self._logger
-        )
+        self._features = [
+            f(self._printer, send_plugin_message, self._logger)
+            for f in self._feature_builders
+        ]
 
     def get_assets(self):
         return {"js": ["js/traminator.js"]}
@@ -29,10 +28,8 @@ class TraminatorPlugin(TemplatePlugin, StartupPlugin, SimpleApiPlugin, AssetPlug
         return [dict(type="tab", template="traminator_tab.jinja2")]
 
     def get_api_commands(self):
-        return {
-            **self._probe_assistant_plus.get_api_commands(),
-            **self._ubl_mesh_generator.get_api_commands(),
-        }
+        # Combine all api commands from the features
+        return dict(ChainMap(*[f.get_api_commands() for f in self._features]))
 
     def on_after_startup(self):
         self._logger.debug(
@@ -43,18 +40,16 @@ class TraminatorPlugin(TemplatePlugin, StartupPlugin, SimpleApiPlugin, AssetPlug
         if not self._printer.is_ready():
             return
 
-        self._probe_assistant_plus.on_api_command(command, data)
-        self._ubl_mesh_generator.on_api_command(command, data)
+        [f.on_api_command(command, data) for f in self._features]
 
     def on_gcode_received(self, comm, line, *args, **kwargs):
-        self._probe_assistant_plus.on_gcode_received(self, line)
-        self._ubl_mesh_generator.on_gcode_received(self, line)
+        [f.on_gcode_received(self, line) for f in self._features]
 
         return line
 
 
 # Inject feature construstors into the plugin. These can be mocked for testing or decorated for extending functionality
-traminator = TraminatorPlugin(ProbeAssistantPlus, UblMeshGenerator)
+traminator = TraminatorPlugin([ProbeAssistantPlus, UblMeshGenerator])
 
 __plugin_name__ = "Traminator"
 __plugin_version__ = "1.0.0"
