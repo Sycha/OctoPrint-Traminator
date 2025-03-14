@@ -11,13 +11,13 @@
     </tr>
     <tr>
         <th>Back</th>
-        <td data-bind="click: probe(3), text: tramOffsets[3]"></td>
-        <td data-bind="click: probe(2), text: tramOffsets[2]"></td>
+        <td data-bind="click: function() { probe(3); }, text: tramOffsets[3]"></td>
+        <td data-bind="click: function() { probe(2); }, text: tramOffsets[2]"></td>
     </tr>
     <tr>
         <th>Front</th>
         <td data-bind="text: tramOffsets[0]"></td>
-        <td data-bind="click: probe(1), text: tramOffsets[1]"></td>
+        <td data-bind="click: function() { probe(1); }, text: tramOffsets[1]"></td>
     </tr>
 </table>
 <div class="progress" data-bind="visible: ublPointCount() > 0">
